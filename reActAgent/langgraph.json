@@ -1,0 +1,13 @@
+// LangGraph Studio
+// python -m pip install "langgraph-cli[inmem]"
+// langgraph dev --config .\reActAgent\langgraph.json
+{
+    "dependencies": [
+        "."
+    ],
+    "graphs": {
+        "my_graph": "./reActAgent/graph.py:build_graph"
+    },
+    "env": "./.env",
+    "python_version": "3.13"
+}

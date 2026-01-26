@@ -3,7 +3,7 @@ from langgraph.graph.state import RunnableConfig
 from rich.pretty import pprint
 from rich.markdown import Markdown
 
-from graph import build_graph
+from reActAgent.graph import build_graph
 
 def main() -> None:
     config = RunnableConfig(configurable={'thread_id': 999})
