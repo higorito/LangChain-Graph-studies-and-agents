@@ -1,6 +1,6 @@
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from functools import lru_cache
-from typing import Generator, cast
+from typing import AsyncGenerator, cast
 from langchain.chat_models import init_chat_model, BaseChatModel
 
 def load_llm() -> BaseChatModel:
@@ -25,8 +25,8 @@ class Connection:
 def get_connection() -> Connection:
     return Connection() 
 
-@contextmanager
-def sync_lifespan() -> Generator[None]:
+@asynccontextmanager
+async def async_lifespan() -> AsyncGenerator[Connection]:
     print("Starting up resources...")
     yield get_connection() #acima quando inicia, abaixo quando termina
     print("Finishing up resources... SYNC")

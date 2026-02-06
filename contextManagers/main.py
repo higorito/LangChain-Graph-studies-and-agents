@@ -1,3 +1,4 @@
+import asyncio
 from langchain_core.messages import HumanMessage
 from langgraph.graph.state import RunnableConfig
 from rich.pretty import pprint
@@ -6,9 +7,9 @@ from rich.markdown import Markdown
 from contextManagers.checkpointer import build_checkpointer
 from contextManagers.context import Context
 from contextManagers.graph import build_graph
-from contextManagers.utils import Connection, sync_lifespan
+from contextManagers.utils import Connection, async_lifespan
 
-def main(connection: Connection) -> None:
+async def run_graph(connection: Connection) -> None:
     checkpointer =  build_checkpointer(connection)
     graph = build_graph(checkpointer)
     
@@ -29,6 +30,9 @@ def main(connection: Connection) -> None:
     print(Markdown( "---"))
     pprint(last_message.content)
 
+async def main() -> None:
+    async with async_lifespan() as connection:
+        await run_graph(connection)
+
 if __name__ == "__main__":
-    with sync_lifespan() as connection:
-        main(connection)
+    asyncio.run(main())
