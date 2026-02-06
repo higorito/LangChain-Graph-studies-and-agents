@@ -2,8 +2,8 @@ from rich.pretty import pprint
 from langchain_core.tools import tool, BaseTool
 from langgraph.prebuilt import ToolRuntime
 
-from runtime.state import State
-from runtime.context import Context
+from contextManagers.state import State
+from contextManagers.context import Context
 
 @tool
 def multiply(x: float, y: float, runtime: ToolRuntime[Context, State]) -> float: #o legal que nao manda isso pra llm. ex: essa ferramenta vai la no banco de dados pegar info do user

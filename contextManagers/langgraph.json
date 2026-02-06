@@ -1,0 +1,10 @@
+{
+    "dependencies": [
+        "."
+    ],
+    "graphs": {
+        "my_graph_2": "./contextManagers/graph.py:build_graph"
+    },
+    "env": "./.env",
+    "python_version": "3.13"
+}
