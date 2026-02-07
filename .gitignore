@@ -3,3 +3,4 @@ venv/
 .vscode/
 __pycache__/
 .langgraph_api
+_local_data/

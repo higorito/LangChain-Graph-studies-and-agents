@@ -1,0 +1,11 @@
+services:
+  psql:
+    container_name: psql
+    hostname: psql
+    image: postgres:18
+    restart: 'no'
+    volumes:
+      - ./_local_data/postgresql:/var/lib/postgresql
+    ports:
+      - 5432:5432
+    env_file: '../.env'

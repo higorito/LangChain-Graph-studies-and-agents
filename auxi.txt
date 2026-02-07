@@ -1,0 +1,5 @@
+
+python -m pip install "langgraph-cli[inmem]"
+py -m pip install langgraph-checkpoint-sqlite
+py -m pip install aiosqlite
+py -m pip install "psycopg[binary]"
