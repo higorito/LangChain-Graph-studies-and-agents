@@ -22,3 +22,15 @@ python -m projeto.main run PETR4.SA --date 2025-02-18 --provider openrouter --mo
 ```
 
 > **Para mais detalhes sobre as bibliotecas, chamadas e o design do chatbot, veja a pasta `projeto/docs/`.**
+
+## Ferramentas
+
+| Ferramenta | Uso |
+|------------|-----|
+| **analisar_acao(ticker, data)** | Análise completa de atribuição de movimento. Aceita ticker ou nome (Petrobras, NVDA). |
+| **resolver_ticker(nome_ou_ticker)** | Converte nome de empresa em ticker (ex: Petrobras → PETR4.SA). |
+| **comparar_ativos(ticker1, ticker2, data)** | Compara dois ativos na mesma data (métricas e classificação). |
+
+## imagens de exemplo
+percebendo que o usuario quer comparar dois ativos, o agente utiliza a ferramenta comparar_ativos depois analisa cada ativo separadamente para retornar as métricas e classificação de movimento:
+![comparar_ativos](./imgs/comparar_ativos.png)
