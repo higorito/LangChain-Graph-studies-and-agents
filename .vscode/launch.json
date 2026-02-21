@@ -1,0 +1,77 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Agente (Gemini)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "projeto.main",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "args": [
+                "PETR4.SA",
+                "today"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Agente (Ollama - Local) - CMIG4",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "projeto.main",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "args": [
+                "CMIG4.SA",
+                "2024-01-23",
+                "--model",
+                "gpt-oss:20b-cloud",
+                "--provider",
+                "ollama"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Agente (OpenAI - gpt-oss:120b) - VALE3",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "projeto.main",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "args": [
+                "VALE3.SA",
+                "today",
+                "--model",
+                "gpt-oss:20b-cloud",
+                "--provider",
+                "ollama"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Modo Interativo",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "projeto.main",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Modo Interativo ollama gpt20b",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "projeto.main",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "args": [
+                "--model",
+                "gpt-oss:20b-cloud",
+                "--provider",
+                "ollama"
+            ],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
