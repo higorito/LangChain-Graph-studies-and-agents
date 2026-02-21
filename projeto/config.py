@@ -91,6 +91,18 @@ def resolve_ticker(input_name: str) -> str:
     return input_name.upper()
 
 
+def ensure_yahoo_ticker(ticker: str) -> str:
+    """Garante ticker no formato que o Yahoo Finance aceita (ex: BBAS3 -> BBAS3.SA)."""
+    t = ticker.strip().upper()
+    if t in TICKER_SECTOR_MAP:
+        return t
+    if t.endswith(".SA"):
+        return t
+    if f"{t}.SA" in TICKER_SECTOR_MAP:
+        return f"{t}.SA"
+    return t
+
+
 async def resolve_ticker_with_llm(input_name: str, llm=None) -> str:
     from pydantic import BaseModel
     from projeto.agent_base import load_llm
