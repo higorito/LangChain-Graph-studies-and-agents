@@ -16,7 +16,7 @@ import sys
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(dotenv_path=find_dotenv(), override=True)
 
-from projeto.graph import build_graph
+from projeto.agents.atribuicao_movimento import build_graph
 from projeto.state import InputState
 from projeto.config import LLM_MODEL, LLM_PROVIDER
 from projeto.display import print_agent_start, print_node_progress, display_result, print_error

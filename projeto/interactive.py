@@ -14,7 +14,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from projeto.config import LLM_MODEL, LLM_PROVIDER, resolve_ticker
 from projeto.display import console
 from projeto.main import run_agent
-from projeto.utils import load_llm
+from projeto.agent_base import load_llm
 
 _llm_instance = None
 _active_model = None
@@ -116,9 +116,6 @@ def run_interactive_mode(model: str | None = None, provider: str | None = None):
     _set_llm(llm)
     _set_model_provider(active_model, active_provider)
     
-    #TODO: implementar forma de passar configurações de model/provider dinamicamente pelo invoke
-    # FICARA AQUI
-
     # Criar Agente ReAct com Ferramentas e Memória
     tools = [analisar_acao]
     memory = MemorySaver()
