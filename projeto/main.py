@@ -13,7 +13,8 @@ Uso:
 import argparse
 import sys
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(dotenv_path=find_dotenv(), override=True)
 
 from projeto.graph import build_graph
 from projeto.state import InputState
@@ -78,7 +79,6 @@ def run_agent(
 
 def main() -> None:
     """Entry point CLI turbinado com lógica interativa e one-shot."""
-    load_dotenv()
     
     parser = argparse.ArgumentParser(description="Agente Financeiro de Atribuição de Movimento")
     

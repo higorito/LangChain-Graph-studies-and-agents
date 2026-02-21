@@ -12,10 +12,10 @@ from rich.pretty import pprint
 console = Console()
 
 _TYPE_EMOJI = {
-    "macro": "🌍",
-    "setorial": "🏭",
-    "company_specific": "🏢",
-    "technical_flow": "📈",
+    "macro": "[MACRO]",
+    "setorial": "[SETORIAL]",
+    "company_specific": "[EMPRESA]",
+    "technical_flow": "[TECNICO]",
 }
 
 _NODE_LABELS = {
@@ -25,7 +25,7 @@ _NODE_LABELS = {
     "fetch_news": "Buscando notícias...",
     "compute_metrics": "Calculando métricas...",
     "classify_movement": "Classificando movimento...",
-    "generate_explanation": "🤖 Gerando explicação com LLM 🤖",
+    "generate_explanation": "[LLM] Gerando explicação [LLM]",
 }
 
 
@@ -36,7 +36,7 @@ def print_agent_start(ticker: str, date: str, model: str, provider: str) -> None
         f"[bold cyan]Data:[/] {date}\n"
         f"[bold cyan]Modelo:[/] {model}\n"
         f"[bold cyan]Provider:[/] {provider}",
-        title="🔍 Agente de Atribuição de Movimento V1",
+        title=" Agente de Atribuição de Movimento V1 ",
         border_style="cyan",
     ))
     console.print()
@@ -45,7 +45,7 @@ def print_agent_start(ticker: str, date: str, model: str, provider: str) -> None
 def print_node_progress(node_name: str) -> None:
     """Exibe o progresso de um nó recém-concluído no stream do grafo."""
     label = _NODE_LABELS.get(node_name, f"{node_name}")
-    console.print(f"  [dim]{label}[/] [green]✓[/]")
+    console.print(f"  [dim]{label}[/] [green]OK[/]")
 
 
 def display_result(result: dict) -> None:
@@ -76,13 +76,13 @@ def display_result(result: dict) -> None:
         f"[bold]Confiança:[/] {classification.get('confidence', '?')}\n"
         f"[bold]Δ índice:[/]  {classification.get('delta_index', 0):.2f}%\n"
         f"[bold]Δ setor:[/]   {classification.get('delta_sector', 0):.2f}%",
-        title="🏷️ Classificação",
+        title="[Classificação]",
         border_style="yellow",
     ))
 
     console.print(Panel(
         explanation,
-        title="💬 Explicação do Agente",
+        title="[Explicação do Agente]",
         border_style="magenta",
     ))
 

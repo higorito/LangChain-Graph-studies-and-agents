@@ -3,10 +3,12 @@ Configurações, constantes e mapeamentos do agente de atribuição de movimento
 """
 
 # ── LLM ──────────────────────────────────────────────────────────────────────
-LLM_MODEL2 = "gpt-oss:20b-cloud"
-LLM_PROVIDER2 = "ollama"
-LLM_MODEL = "gemini-2.5-flash"
-LLM_PROVIDER = "google_genai"
+from projeto.providers import DEFAULT_MODELS, list_providers
+
+LLM_MODEL = DEFAULT_MODELS["openrouter"]  # "openai/gpt-4o-mini"
+LLM_PROVIDER = "openrouter"
+
+AVAILABLE_PROVIDERS = list_providers()
 
 # ── Thresholds de classificação ──────────────────────────────────────────────
 THRESHOLDS = {
@@ -112,16 +114,8 @@ def resolve_ticker(input_name: str) -> str:
     return input_name.upper()
 
 
-async def resolve_ticker_with_llm(input_name: str, llm) -> str:
-    """Resolve ticker usando LLM como fallback quando não encontrar no mapeamento.
-    
-    Args:
-        input_name: Nome da empresa ou ticker não reconhecido
-        llm: Instância do LLM para fazer a inferência
-    
-    Returns:
-        Ticker sugerido pelo LLM
-    """
+async def resolve_ticker_with_llm(input_name: str, llm=None) -> str:
+    """Resolve ticker usando LLM como fallback."""
     from pydantic import BaseModel
     
     class TickerSuggestion(BaseModel):
@@ -140,6 +134,10 @@ If American, use the standard ticker (e.g., AAPL, MSFT).
 Respond with the ticker symbol only, nothing else."""
 
     try:
+        if llm is None:
+            from projeto.utils import load_llm
+            llm = load_llm()
+            
         structured_llm = llm.with_structured_output(TickerSuggestion)
         result = await structured_llm.ainvoke(prompt)
         return result.ticker

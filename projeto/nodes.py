@@ -160,7 +160,7 @@ def generate_explanation(state: AgentState, config: RunnableConfig) -> dict:
     clean_config = {"configurable": config.get("configurable", {})}
 
     # with_structured_output: retorno Pydantic direto
-    structured_llm = load_structured_llm(AgentOutput)
+    structured_llm = load_structured_llm(AgentOutput, config=clean_config)
 
     try:
         # Repassa o 'config' limpo para sobrescrever modelo/provider se houver
@@ -169,7 +169,7 @@ def generate_explanation(state: AgentState, config: RunnableConfig) -> dict:
     except Exception as e:
         # Fallback: LLM sem structured output
         from projeto.utils import load_llm
-        llm = load_llm()
+        llm = load_llm(config=clean_config)
         response = llm.invoke(messages, config=clean_config)
         explanation = response.content if hasattr(response, "content") else str(response)
 

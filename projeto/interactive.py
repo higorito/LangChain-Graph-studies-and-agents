@@ -28,6 +28,7 @@ def _get_llm():
 
 def _set_llm(llm):
     global _llm_instance
+    _llm_instance = llm
 
 
 def _get_model_provider():
