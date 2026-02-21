@@ -8,3 +8,7 @@ yfinance>=0.2.50
 pydantic>=2.0
 pandas>=2.0
 rich>=13.0
+
+# Checkpoint persistente (opcional) se windows pip install psycopg-binary
+# langgraph-checkpoint-sqlite  # chat --checkpoint sqlite
+# langgraph-checkpoint-postgres  # chat --checkpoint postgres (requer Postgres)

@@ -114,6 +114,25 @@ Exemplos:
 
     chat_p = subparsers.add_parser("chat", help="Modo conversacional com memória (ferramentas: análise, comparação, etc.)")
     _parse_llm_options(chat_p)
+    chat_p.add_argument(
+        "--checkpoint",
+        type=str,
+        default="memory",
+        choices=("memory", "sqlite", "postgres"),
+        help="Backend de persistência da conversa: memory (padrão), sqlite ou postgres",
+    )
+    chat_p.add_argument(
+        "--checkpoint-uri",
+        type=str,
+        default=None,
+        help="SQLite: caminho do arquivo (ou :memory:). Postgres: DSN (ou use CHECKPOINT_POSTGRES_URI)",
+    )
+    chat_p.add_argument(
+        "--thread-id",
+        type=str,
+        default="sessao_terminal_1",
+        help="ID da thread/sessão (permite múltiplas conversas com sqlite/postgres)",
+    )
 
     argv = sys.argv[1:]
     if "run" not in argv and "chat" not in argv:
@@ -141,6 +160,9 @@ Exemplos:
         run_interactive_mode(
             model=getattr(args, "model", None),
             provider=getattr(args, "provider", None),
+            checkpoint_backend=getattr(args, "checkpoint", "memory"),
+            checkpoint_conn_string=getattr(args, "checkpoint_uri", None),
+            thread_id=getattr(args, "thread_id", "sessao_terminal_1"),
         )
         return
 

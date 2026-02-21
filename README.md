@@ -13,6 +13,9 @@ python -m projeto.main chat                   # modo conversacional
 python -m projeto.main chat --provider ollama --model gpt-oss:20b-cloud
 ```
 
+Também é possível persistir a conversa em um banco de dados SQLite ou Postgres:
+veja mais detalhes em [projeto/docs/checkpoint.md](projeto/docs/checkpoint.md)
+
 ### 2. Modo One-Shot (Direto)
 Executa o grafo sem interatividade, extraindo os dados e retornando o JSON estruturado diretamente no terminal.
 ```bash
