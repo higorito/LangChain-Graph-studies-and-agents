@@ -1,7 +1,7 @@
 from projeto.agent_base import DEFAULT_MODELS, list_providers
 
-LLM_MODEL = DEFAULT_MODELS["openrouter"]
-LLM_PROVIDER = "openrouter"
+LLM_MODEL = DEFAULT_MODELS["ollama"]
+LLM_PROVIDER = "ollama"
 AVAILABLE_PROVIDERS = list_providers()
 
 THRESHOLDS = {
@@ -134,3 +134,4 @@ def get_ticker_mapping(ticker: str) -> dict[str, str]:
     if ticker.upper().endswith(".SA"):
         return DEFAULT_BR
     return DEFAULT_US
+

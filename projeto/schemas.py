@@ -1,44 +1,48 @@
 """
-Schemas Pydantic para a saída estruturada do LLM.
+Schemas Pydantic para a saida estruturada do LLM.
 
-AgentOutput é usado com `with_structured_output` para garantir que o LLM
-retorne dados validados automaticamente — sem parse manual de JSON.
+AgentOutput e usado para garantir retorno validado automaticamente.
 """
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AgentOutput(BaseModel):
-    """Saída estruturada do agente — usada com with_structured_output.
+    """Saida estruturada final do agente."""
 
-    O LLM retorna diretamente uma instância validada deste model,
-    eliminando a necessidade de parse manual de JSON.
-    """
     price_change_pct: float = Field(
-        ..., description="Variação percentual do preço do ativo no dia"
+        ..., description="Variacao percentual do preco do ativo no dia"
     )
     index_change_pct: float = Field(
-        ..., description="Variação percentual do índice de referência no dia"
+        ..., description="Variacao percentual do indice de referencia no dia"
     )
     sector_change_pct: float = Field(
-        ..., description="Variação percentual do ETF setorial no dia"
+        ..., description="Variacao percentual do ETF setorial no dia"
     )
     market_trend: Literal["uptrend", "downtrend", "sideways"] = Field(
-        ..., description="Tendência de mercado baseada em SMA20 vs SMA50 do índice"
+        ..., description="Tendencia de mercado baseada em SMA20 vs SMA50 do indice"
     )
     volume_anomaly: bool = Field(
-        ..., description="True se volume do dia > 1.8x a média de 20 dias"
+        ..., description="True se volume do dia > 1.8x a media de 20 dias"
     )
     movement_type: Literal["macro", "setorial", "company_specific", "technical_flow"] = Field(
-        ..., description="Classificação do tipo de movimento"
+        ..., description="Classificacao do tipo de movimento (canonico: setorial)"
     )
     primary_hypothesis: str = Field(
-        ..., description="Hipótese principal para o movimento"
+        ..., description="Hipotese principal para o movimento"
     )
     confidence: Literal["high", "medium", "low"] = Field(
-        ..., description="Nível de confiança na classificação"
+        ..., description="Nivel de confianca na classificacao"
     )
     explanation: str = Field(
-        ..., description="Explicação textual detalhada do movimento em português brasileiro"
+        ..., description="Explicacao textual detalhada do movimento em portugues brasileiro"
     )
+
+    @field_validator("movement_type", mode="before")
+    @classmethod
+    def _normalize_movement_type(cls, value: str) -> str:
+        raw = str(value).strip().lower()
+        if raw == "sectorial":
+            return "setorial"
+        return raw

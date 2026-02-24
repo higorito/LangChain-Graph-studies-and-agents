@@ -19,7 +19,7 @@ def load_llm(
         model = model or conf.get("model")
         provider = provider or conf.get("model_provider")
 
-    _default_provider = "openrouter"
+    _default_provider = "ollama"
     active_provider = provider or _default_provider
     active_model = model or DEFAULT_MODELS.get(active_provider, DEFAULT_MODELS[_default_provider])
 
@@ -45,3 +45,4 @@ def load_structured_llm(
 ) -> BaseChatModel:
     llm = load_llm(model=model, provider=provider, config=config)
     return llm.with_structured_output(schema)
+
