@@ -4,7 +4,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Iterator
 
-from projeto.agent_base.checkpoint import get_checkpointer, get_checkpointer_cm
+from projeto.agent_base.checkpoint import (
+    get_checkpoint_backend_status,
+    get_checkpointer,
+    get_checkpointer_cm,
+    resolve_checkpoint_target,
+)
 from projeto.agent_base.runtime import build_runnable_config
 from projeto.interactive_llm import (
     configure_runtime,
@@ -282,25 +287,39 @@ def _chat_app_context(
     checkpointer,
     checkpoint_backend: str,
     checkpoint_conn_string: str | None,
-) -> Iterator[tuple[ChatSession, str]]:
+) -> Iterator[tuple[ChatSession, str, str | None]]:
     if checkpointer is not None:
-        yield ChatSession(checkpointer), "custom"
+        yield ChatSession(checkpointer), "custom", None
         return
 
-    backend = (checkpoint_backend or "memory").lower().strip()
+    backend, resolved_uri = resolve_checkpoint_target(
+        checkpoint_backend,
+        checkpoint_conn_string,
+    )
+
+    backend_ready, backend_message = get_checkpoint_backend_status(backend)
+    if not backend_ready and backend == "sqlite":
+        fallback_message = (
+            f"{backend_message}. O chat vai abrir em memory, sem persistencia em disco, "
+            "ate o pacote de sqlite ser instalado."
+        )
+        yield ChatSession(get_checkpointer("memory")), "memory (fallback)", fallback_message
+        return
+
     if backend == "memory":
-        yield ChatSession(get_checkpointer("memory")), "memory"
+        yield ChatSession(get_checkpointer("memory")), "memory", None
         return
 
-    with get_checkpointer_cm(backend, checkpoint_conn_string) as runtime_checkpointer:
-        yield ChatSession(runtime_checkpointer), backend
+    with get_checkpointer_cm(backend, resolved_uri) as runtime_checkpointer:
+        label = f"{backend}: {resolved_uri}" if resolved_uri else backend
+        yield ChatSession(runtime_checkpointer), label, None
 
 
 def run_interactive_mode(
     model: str | None = None,
     provider: str | None = None,
     checkpointer=None,
-    checkpoint_backend: str = "memory",
+    checkpoint_backend: str = "sqlite",
     checkpoint_conn_string: str | None = None,
     thread_id: str = "sessao_terminal_1",
 ):
@@ -320,13 +339,16 @@ def run_interactive_mode(
         checkpointer=checkpointer,
         checkpoint_backend=checkpoint_backend,
         checkpoint_conn_string=checkpoint_conn_string,
-    ) as (session, checkpoint_label):
+    ) as (session, checkpoint_label, checkpoint_warning):
         terminal.render_welcome(
             provider=active_provider,
             model=active_model,
             checkpoint_label=checkpoint_label,
             thread_id=thread_id,
         )
+
+        if checkpoint_warning:
+            terminal.render_warning(checkpoint_warning)
 
         provider_ready, provider_message = get_provider_status(active_provider)
         if not provider_ready:

@@ -112,14 +112,14 @@ Exemplos:
     )
     _parse_llm_options(run_p)
 
-    chat_p = subparsers.add_parser("chat", help="Modo conversacional com memoria e Gemini como padrao")
+    chat_p = subparsers.add_parser("chat", help="Modo conversacional com sqlite persistente e Gemini como padrao")
     _parse_llm_options(chat_p)
     chat_p.add_argument(
         "--checkpoint",
         type=str,
-        default="memory",
+        default="sqlite",
         choices=("memory", "sqlite", "postgres"),
-        help="Backend de persistencia da conversa: memory, sqlite ou postgres",
+        help="Backend de persistencia da conversa: sqlite (padrao), memory ou postgres",
     )
     chat_p.add_argument(
         "--checkpoint-uri",
