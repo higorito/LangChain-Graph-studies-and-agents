@@ -7,12 +7,15 @@ from difflib import get_close_matches
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
 
-from projeto.agent_base import DEFAULT_MODELS, list_providers
+from projeto.agent_base.providers import DEFAULT_MODELS, list_providers
 
 
 def _normalize_provider_name(provider: str) -> str:
     normalized = (provider or "").strip().lower()
-    aliases = {"google": "google_genai"}
+    aliases = {
+        "google": "google_genai",
+        "gemini": "google_genai",
+    }
     return aliases.get(normalized, normalized)
 
 

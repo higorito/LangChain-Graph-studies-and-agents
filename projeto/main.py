@@ -1,23 +1,19 @@
 """
-Entry point do Agente de Atribuição de Movimento.
+Entry point do Agente de Atribuicao de Movimento.
 
 Uso:
-    python -m projeto.main run                    # análise com ticker padrão (PETR4.SA)
-    python -m projeto.main run PETR4.SA          # análise de um ativo
+    python -m projeto.main run                    # analise com ticker padrao (PETR4.SA)
+    python -m projeto.main run PETR4.SA          # analise de um ativo
     python -m projeto.main run PETR4.SA --date 2025-02-18 --provider openrouter --model openai/gpt-4o-mini
-    python -m projeto.main chat                   # modo conversacional
+    python -m projeto.main chat                   # modo conversacional (Gemini por padrao)
     python -m projeto.main chat --provider ollama --model gpt-oss:20b-cloud
 """
 import argparse
 import sys
 
-from dotenv import load_dotenv, find_dotenv
-load_dotenv(dotenv_path=find_dotenv(), override=True)
+from dotenv import find_dotenv, load_dotenv
 
-from projeto.agents.atribuicao_movimento import build_graph
-from projeto.state import InputState
-from projeto.config import LLM_MODEL, LLM_PROVIDER
-from projeto.display import print_agent_start, print_node_progress, display_result, print_error
+load_dotenv(dotenv_path=find_dotenv(), override=True)
 
 
 def run_agent(
@@ -27,6 +23,16 @@ def run_agent(
     provider: str | None = None,
     silent: bool = False,
 ) -> dict:
+    from projeto.agent_base.runtime import (
+        build_runnable_config,
+        collect_graph_updates,
+        stream_graph_updates,
+    )
+    from projeto.agents.atribuicao_movimento import build_graph
+    from projeto.config import LLM_MODEL, LLM_PROVIDER
+    from projeto.display import print_agent_start, print_error, print_node_progress
+    from projeto.state import InputState
+
     user_input = InputState(ticker=ticker, date=date)
     active_model = model or LLM_MODEL
     active_provider = provider or LLM_PROVIDER
@@ -41,28 +47,22 @@ def run_agent(
 
     try:
         graph = build_graph()
-        configurable = {}
-        if model:
-            configurable["model"] = model
-        if provider:
-            configurable["model_provider"] = provider
+        agent_input = {"ticker": user_input.ticker, "date": user_input.date}
+        run_config = build_runnable_config(model=model, provider=provider)
 
-        final_state = {}
-        for event in graph.stream(
-            {"ticker": user_input.ticker, "date": user_input.date},
-            config={"configurable": configurable} if configurable else None,
-            stream_mode="updates",
-        ):
-            for node_name, node_output in event.items():
-                if not silent:
-                    print_node_progress(node_name)
+        if silent:
+            return collect_graph_updates(graph, agent_input, config=run_config)
+
+        final_state: dict = {}
+        for node_name, node_output in stream_graph_updates(graph, agent_input, config=run_config):
+            print_node_progress(node_name)
+            if isinstance(node_output, dict):
                 final_state.update(node_output)
 
         return final_state
-
-    except Exception as e:
+    except Exception as error:
         if not silent:
-            print_error("Falha fatal na execução do agente.", error=e)
+            print_error("Falha fatal na execucao do agente.", error=error)
             sys.exit(1)
         raise
 
@@ -78,26 +78,26 @@ def _parse_llm_options(parser: argparse.ArgumentParser) -> None:
         "--provider",
         type=str,
         default=None,
-        help="Provedor LLM: ollama, google_genai (ou google), openrouter",
+        help="Provedor LLM: ollama, google_genai (ou google/gemini), openrouter",
     )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Agente Financeiro de Atribuição de Movimento",
+        description="Agente Financeiro de Atribuicao de Movimento",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemplos:
-  %(prog)s run                          # análise PETR4.SA, data hoje, modelo padrão
+  %(prog)s run                          # analise PETR4.SA, data hoje, modelo padrao
   %(prog)s run NVDA --provider openrouter --model openai/gpt-4o-mini
   %(prog)s run PETR4.SA --date 2025-02-18
-  %(prog)s chat                         # modo conversacional
+  %(prog)s chat                         # modo conversacional (Gemini por padrao)
   %(prog)s chat --provider ollama --model gpt-oss:20b-cloud
         """.strip(),
     )
-    subparsers = parser.add_subparsers(dest="cmd", help="Comando: run (análise one-shot) ou chat (conversacional)")
+    subparsers = parser.add_subparsers(dest="cmd", help="Comando: run (analise one-shot) ou chat")
 
-    run_p = subparsers.add_parser("run", help="Executa análise de atribuição de movimento para um ativo")
+    run_p = subparsers.add_parser("run", help="Executa analise de atribuicao de movimento para um ativo")
     run_p.add_argument(
         "ticker",
         nargs="?",
@@ -108,30 +108,30 @@ Exemplos:
         "--date",
         type=str,
         default="today",
-        help="Data do pregão: YYYY-MM-DD ou today (default: today)",
+        help="Data do pregao: YYYY-MM-DD ou today (default: today)",
     )
     _parse_llm_options(run_p)
 
-    chat_p = subparsers.add_parser("chat", help="Modo conversacional com memória (ferramentas: análise, comparação, etc.)")
+    chat_p = subparsers.add_parser("chat", help="Modo conversacional com memoria e Gemini como padrao")
     _parse_llm_options(chat_p)
     chat_p.add_argument(
         "--checkpoint",
         type=str,
         default="memory",
         choices=("memory", "sqlite", "postgres"),
-        help="Backend de persistência da conversa: memory (padrão), sqlite ou postgres",
+        help="Backend de persistencia da conversa: memory, sqlite ou postgres",
     )
     chat_p.add_argument(
         "--checkpoint-uri",
         type=str,
         default=None,
-        help="SQLite: caminho do arquivo (ou :memory:). Postgres: DSN (ou use CHECKPOINT_POSTGRES_URI)",
+        help="SQLite: caminho do arquivo. Postgres: DSN (ou use CHECKPOINT_POSTGRES_URI)",
     )
     chat_p.add_argument(
         "--thread-id",
         type=str,
         default="sessao_terminal_1",
-        help="ID da thread/sessão (permite múltiplas conversas com sqlite/postgres)",
+        help="ID da thread/sessao",
     )
 
     argv = sys.argv[1:]
@@ -142,9 +142,12 @@ Exemplos:
             argv = ["chat"] + argv
         else:
             argv = ["run", argv[0]] + argv[1:]
+
     args = parser.parse_args(argv)
 
     if args.cmd == "run":
+        from projeto.display import display_result
+
         result = run_agent(
             ticker=args.ticker,
             date=args.date,
@@ -157,6 +160,7 @@ Exemplos:
 
     if args.cmd == "chat" or args.cmd is None:
         from projeto.interactive import run_interactive_mode
+
         run_interactive_mode(
             model=getattr(args, "model", None),
             provider=getattr(args, "provider", None),

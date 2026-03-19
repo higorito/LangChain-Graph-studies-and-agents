@@ -1,67 +1,78 @@
-"""
-Modo conversacional com StateGraph: call_llm → tools_condition → tools ou END.
-Usa ToolNode e tools_condition do LangGraph (padrão moderno).
-"""
-import warnings
 import logging
-from typing import Annotated, Sequence, TypedDict
+import warnings
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any, Iterator
 
-from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
-from langgraph.prebuilt.tool_node import tools_condition
-from projeto.config import LLM_MODEL, LLM_PROVIDER
-from projeto.agent_base.checkpoint import (
-    get_checkpointer,
-    get_checkpointer_cm,
+from projeto.agent_base.checkpoint import get_checkpointer, get_checkpointer_cm
+from projeto.agent_base.runtime import build_runnable_config
+from projeto.interactive_llm import (
+    configure_runtime,
+    get_active_llm,
+    get_active_model_provider,
+    get_bound_chat_llm,
 )
-from projeto.display import console
-from projeto.agent_base import load_llm
-from projeto.tools.chat_tools import analisar_acao, resolver_ticker, comparar_ativos
+from projeto.interactive_models import (
+    find_model_option,
+    get_provider_status,
+    resolve_interactive_selection,
+)
+from projeto.interactive_terminal import InteractiveTerminal, SlashCommand, parse_command
 
-_llm_instance = None
-_active_model = None
-_active_provider = None
+EXIT_COMMANDS = {"exit", "quit", "q"}
+SYSTEM_PROMPT = """Voce e um analista financeiro senior para Bovespa e exterior.
+Responda em portugues brasileiro com formato limpo em markdown.
+Comece pela conclusao, depois detalhe os drivers em bullets curtos.
+Use as ferramentas quando precisar de dados de mercado e nao invente numeros.
+Quando o usuario pedir comparacao entre dois ativos, use comparar_ativos uma unica vez.
+Nao chame analisar_acao duas vezes para perguntas comparativas.
+Se houver incerteza, diga isso explicitamente.
+Se o usuario fizer perguntas de acompanhamento sobre o mesmo ativo e o contexto ja estiver na conversa, reutilize esse contexto antes de chamar ferramentas novamente."""
+
+
+@dataclass(slots=True)
+class ChatSession:
+    checkpointer: Any
+    app: Any | None = None
+
+    def get_app(self) -> Any:
+        if self.app is None:
+            self.app = _build_chat_graph(self.checkpointer)
+        return self.app
 
 
 def _get_llm():
-    return _llm_instance
-
-
-def _set_llm(llm):
-    global _llm_instance
-    _llm_instance = llm
+    return get_active_llm()
 
 
 def _get_model_provider():
-    return _active_model, _active_provider
+    return get_active_model_provider()
 
 
-def _set_model_provider(model, provider):
-    global _active_model, _active_provider
-    _active_model = model
-    _active_provider = provider
+def _get_chat_tools() -> list[Any]:
+    from projeto.tools.chat_tools import analisar_acao, comparar_ativos, resolver_ticker
 
-
-CHAT_TOOLS = [analisar_acao, resolver_ticker, comparar_ativos]
-
-SYSTEM_PROMPT = """Você é um analista financeiro sênior (Bovespa e exterior), conversando no terminal.
-Seja direto e profissional. Use as ferramentas quando precisar de dados de mercado; não invente números.
-Se o usuário fizer pergunta de acompanhamento sobre o mesmo ativo (ex: "e as notícias?", "qual o preço?") e o resultado da ferramenta já estiver na conversa, use esse contexto em vez de chamar a ferramenta de novo."""
+    return [comparar_ativos, analisar_acao, resolver_ticker]
 
 
 def _build_chat_graph(checkpointer):
+    from typing import Annotated, Sequence, TypedDict
+
+    from langchain_core.messages import BaseMessage, SystemMessage
+    from langgraph.graph import END, START, StateGraph
+    from langgraph.graph.message import add_messages
+    from langgraph.prebuilt import ToolNode
+    from langgraph.prebuilt.tool_node import tools_condition
+
+    chat_tools = _get_chat_tools()
+
     class State(TypedDict):
         messages: Annotated[Sequence[BaseMessage], add_messages]
 
-    llm = _get_llm()
-    if llm is None:
-        raise RuntimeError("LLM não configurado. Chamar run_interactive_mode() após load_llm.")
-    llm_with_tools = llm.bind_tools(CHAT_TOOLS)
-    tool_node = ToolNode(CHAT_TOOLS)
+    tool_node = ToolNode(chat_tools)
 
     def call_llm(state: State):
+        llm_with_tools = get_bound_chat_llm(chat_tools)
         messages = [SystemMessage(content=SYSTEM_PROMPT)] + list(state["messages"])
         response = llm_with_tools.invoke(messages)
         return {"messages": [response]}
@@ -75,39 +86,214 @@ def _build_chat_graph(checkpointer):
     return builder.compile(checkpointer=checkpointer)
 
 
-def _run_chat_loop(app, config: dict) -> None:
+def _message_to_text(content: object) -> str:
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict):
+                parts.append(str(block.get("text", block)))
+            else:
+                parts.append(str(block))
+        return "".join(parts).strip()
+    return str(content).strip()
+
+
+def _message_signature(message: Any) -> str:
+    message_id = getattr(message, "id", None)
+    if message_id:
+        return str(message_id)
+    return f"{message.type}:{getattr(message, 'name', '')}:{_message_to_text(getattr(message, 'content', ''))}"
+
+
+def _render_stream_event(event: dict, terminal: InteractiveTerminal, seen: set[str]) -> None:
+    messages = event.get("messages") or []
+    if not messages:
+        return
+
+    last = messages[-1]
+    signature = _message_signature(last)
+    if signature in seen:
+        return
+    seen.add(signature)
+
+    if last.type == "ai":
+        tool_calls = getattr(last, "tool_calls", None) or []
+        if tool_calls:
+            terminal.render_tool_calls([call["name"] for call in tool_calls])
+            return
+
+        text = _message_to_text(last.content)
+        if text:
+            model, provider = get_active_model_provider()
+            terminal.render_assistant(
+                text,
+                provider=provider or "desconhecido",
+                model=model or "desconhecido",
+            )
+        return
+
+    if last.type == "tool":
+        terminal.render_tool_result(
+            name=getattr(last, "name", None),
+            content=getattr(last, "content", ""),
+        )
+
+
+def _run_chat_turn(
+    session: ChatSession,
+    config: dict,
+    user_input: str,
+    terminal: InteractiveTerminal,
+) -> None:
+    from langchain_core.messages import HumanMessage
+
+    app = session.get_app()
+    seen: set[str] = set()
+    for event in app.stream(
+        {"messages": [HumanMessage(content=user_input)]},
+        config=config,
+        stream_mode="values",
+    ):
+        _render_stream_event(event, terminal, seen)
+
+
+def _handle_model_command(argument: str, terminal: InteractiveTerminal) -> None:
+    from projeto.interactive_models import build_model_catalog
+
+    catalog = build_model_catalog()
+    current_model, current_provider = get_active_model_provider()
+
+    selection = argument
+    if not selection:
+        terminal.render_model_catalog(
+            catalog,
+            current_provider=current_provider,
+            current_model=current_model,
+        )
+        selection = terminal.prompt_model_selection()
+        if not selection:
+            terminal.render_info("Troca de modelo cancelada.")
+            return
+
+    option = find_model_option(selection, catalog)
+    if option is None:
+        terminal.render_error("Modelo nao reconhecido. Use /model para abrir o catalogo.")
+        return
+
+    configure_runtime(model=option.model, provider=option.provider)
+    terminal.render_model_changed(provider=option.provider, model=option.model)
+    if not option.provider_ready:
+        terminal.render_warning(option.provider_message)
+
+
+def _handle_command(
+    command: SlashCommand,
+    *,
+    terminal: InteractiveTerminal,
+    checkpoint_label: str,
+    thread_id: str,
+) -> bool:
+    if command.name in EXIT_COMMANDS:
+        terminal.render_info("Ate logo!")
+        return False
+
+    if command.name in {"help", "h"}:
+        terminal.render_help()
+        return True
+
+    if command.name in {"status", "config"}:
+        model, provider = get_active_model_provider()
+        terminal.render_status(
+            provider=provider or "desconhecido",
+            model=model or "desconhecido",
+            checkpoint_label=checkpoint_label,
+            thread_id=thread_id,
+        )
+        return True
+
+    if command.name in {"model", "models", "provider"}:
+        _handle_model_command(command.argument, terminal)
+        return True
+
+    if command.name in {"clear", "cls"}:
+        terminal.clear()
+        model, provider = get_active_model_provider()
+        terminal.render_welcome(
+            provider=provider or "desconhecido",
+            model=model or "desconhecido",
+            checkpoint_label=checkpoint_label,
+            thread_id=thread_id,
+        )
+        return True
+
+    terminal.render_error("Comando nao suportado. Use /help para ver as opcoes.")
+    return True
+
+
+def _run_chat_loop(
+    session: ChatSession,
+    config: dict,
+    *,
+    terminal: InteractiveTerminal,
+    checkpoint_label: str,
+    thread_id: str,
+) -> None:
     while True:
         try:
-            user_input = input("Você: ").strip()
-            if user_input.lower() in ("sair", "quit", "exit", "q"):
-                console.print("\n[dim]Até logo![/]")
+            model, provider = get_active_model_provider()
+            user_input = terminal.prompt(provider=provider, model=model)
+            if user_input.lower() in EXIT_COMMANDS:
+                terminal.render_info("Ate logo!")
                 break
             if not user_input:
                 continue
-            for event in app.stream(
-                {"messages": [HumanMessage(content=user_input)]},
-                config=config,
-                stream_mode="values",
-            ):
-                last = event["messages"][-1]
-                if last.type == "ai":
-                    if getattr(last, "tool_calls", None):
-                        names = [tc["name"] for tc in last.tool_calls]
-                        console.print(f"\n[dim italic]... {', '.join(names)} ...[/]")
-                    elif last.content:
-                        text = last.content
-                        if isinstance(text, list):
-                            text = "".join(
-                                b.get("text", b) if isinstance(b, dict) else str(b)
-                                for b in text
-                            )
-                        if str(text).strip():
-                            console.print(f"\n[bold blue]Assistente:[/] {str(text).strip()}\n")
+
+            command = parse_command(user_input)
+            if command is not None:
+                should_continue = _handle_command(
+                    command,
+                    terminal=terminal,
+                    checkpoint_label=checkpoint_label,
+                    thread_id=thread_id,
+                )
+                if not should_continue:
+                    break
+                continue
+
+            _run_chat_turn(session, config, user_input, terminal)
         except KeyboardInterrupt:
-            console.print("\n[dim]Interrompido. Até logo![/]")
+            terminal.render_info("Interrompido. Ate logo!")
             break
-        except Exception as e:
-            console.print(f"\n[bold red]Erro:[/] {e}\n")
+        except Exception as error:
+            _, provider = get_active_model_provider()
+            provider_ready, _ = get_provider_status(provider or "")
+            if not provider_ready:
+                terminal.render_error(
+                    "O modelo ativo nao conseguiu responder. Use /model para trocar o runtime.",
+                    error,
+                )
+            else:
+                terminal.render_error("Falha durante a conversa.", error)
+
+
+@contextmanager
+def _chat_app_context(
+    *,
+    checkpointer,
+    checkpoint_backend: str,
+    checkpoint_conn_string: str | None,
+) -> Iterator[tuple[ChatSession, str]]:
+    if checkpointer is not None:
+        yield ChatSession(checkpointer), "custom"
+        return
+
+    backend = (checkpoint_backend or "memory").lower().strip()
+    if backend == "memory":
+        yield ChatSession(get_checkpointer("memory")), "memory"
+        return
+
+    with get_checkpointer_cm(backend, checkpoint_conn_string) as runtime_checkpointer:
+        yield ChatSession(runtime_checkpointer), backend
 
 
 def run_interactive_mode(
@@ -122,36 +308,37 @@ def run_interactive_mode(
     logging.getLogger("langchain_core").setLevel(logging.ERROR)
     logging.getLogger("langchain_google_genai").setLevel(logging.ERROR)
 
-    active_model = model or LLM_MODEL
-    active_provider = provider or LLM_PROVIDER
-    llm = load_llm(model=active_model, provider=active_provider)
-    _set_llm(llm)
-    _set_model_provider(active_model, active_provider)
+    terminal = InteractiveTerminal()
+    active_model, active_provider = resolve_interactive_selection(
+        model=model,
+        provider=provider,
+    )
+    configure_runtime(model=active_model, provider=active_provider)
+    run_config = build_runnable_config(thread_id=thread_id) or {}
 
-    backend = (checkpoint_backend or "memory").lower().strip()
-    if checkpointer is not None:
-        app = _build_chat_graph(checkpointer)
-        config = {"configurable": {"thread_id": thread_id}}
-        console.print("\n[bold green]Modo Chat[/] (sair/quit/exit para encerrar)")
-        console.print("[dim]Assistente financeiro. Pode analisar ativos, comparar e resolver tickers.[/]\n")
-        console.print(f"[dim]Modelo: {active_model} | Provider: {active_provider}[/]\n")
-        _run_chat_loop(app, config)
-        return
+    with _chat_app_context(
+        checkpointer=checkpointer,
+        checkpoint_backend=checkpoint_backend,
+        checkpoint_conn_string=checkpoint_conn_string,
+    ) as (session, checkpoint_label):
+        terminal.render_welcome(
+            provider=active_provider,
+            model=active_model,
+            checkpoint_label=checkpoint_label,
+            thread_id=thread_id,
+        )
 
-    if backend == "memory":
-        cp = get_checkpointer("memory")
-        app = _build_chat_graph(cp)
-        config = {"configurable": {"thread_id": thread_id}}
-        console.print("\n[bold green]Modo Chat[/] (sair/quit/exit para encerrar)")
-        console.print("[dim]Assistente financeiro. Pode analisar ativos, comparar e resolver tickers.[/]\n")
-        console.print(f"[dim]Modelo: {active_model} | Provider: {active_provider} | Checkpoint: memory[/]\n")
-        _run_chat_loop(app, config)
-        return
+        provider_ready, provider_message = get_provider_status(active_provider)
+        if not provider_ready:
+            terminal.render_warning(
+                "O provider atual nao parece configurado. "
+                f"{provider_message} Use /model para trocar antes da primeira pergunta."
+            )
 
-    with get_checkpointer_cm(backend, checkpoint_conn_string) as cp:
-        app = _build_chat_graph(cp)
-        config = {"configurable": {"thread_id": thread_id}}
-        console.print("\n[bold green]Modo Chat[/] (sair/quit/exit para encerrar)")
-        console.print("[dim]Assistente financeiro. Pode analisar ativos, comparar e resolver tickers.[/]\n")
-        console.print(f"[dim]Modelo: {active_model} | Provider: {active_provider} | Checkpoint: {backend}[/]\n")
-        _run_chat_loop(app, config)
+        _run_chat_loop(
+            session,
+            run_config,
+            terminal=terminal,
+            checkpoint_label=checkpoint_label,
+            thread_id=thread_id,
+        )

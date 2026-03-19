@@ -120,11 +120,9 @@ def generate_explanation(state: AgentState, config: RunnableConfig) -> dict:
         SystemMessage(content=SYSTEM_PROMPT_EXPLANATION),
         HumanMessage(content=human_content),
     ]
-    clean_config = {"configurable": config.get("configurable", {})}
-
     try:
-        llm = load_llm(config=clean_config)
-        response = llm.invoke(messages, config=clean_config)
+        llm = load_llm(config=config)
+        response = llm.invoke(messages, config=config)
         explanation_text = _message_to_text(response)
     except Exception:
         explanation_text = _build_fallback_explanation(state)

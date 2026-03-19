@@ -1,35 +1,40 @@
 import os
-from typing import cast, TypeVar, Optional
+from collections.abc import Mapping
+from typing import Any, Optional, TypeVar, cast
+
 from pydantic import BaseModel
 from langchain.chat_models import init_chat_model, BaseChatModel
+from langchain_core.runnables import RunnableConfig
 
 from projeto.agent_base.providers import (
     get_chat_model_kwargs,
     validate_provider,
     DEFAULT_MODELS,
 )
+from projeto.agent_base.runtime import normalize_provider_name, resolve_model_selection
+
+
+def _get_default_provider() -> str:
+    provider_from_env = normalize_provider_name(os.getenv("LLM_PROVIDER") or "ollama")
+    if provider_from_env not in DEFAULT_MODELS:
+        return "ollama"
+    return cast(str, provider_from_env)
 
 
 def load_llm(
     model: Optional[str] = None,
     provider: Optional[str] = None,
-    config: Optional[dict] = None,
+    config: RunnableConfig | Mapping[str, Any] | None = None,
 ) -> BaseChatModel:
-    if config and "configurable" in config:
-        conf = config["configurable"]
-        model = model or conf.get("model")
-        provider = provider or conf.get("model_provider")
-
-    provider_from_env = (os.getenv("LLM_PROVIDER") or "ollama").strip().lower()
-    if provider_from_env == "google":
-        provider_from_env = "google_genai"
-    _default_provider = provider_from_env if provider_from_env in DEFAULT_MODELS else "ollama"
-    active_provider = provider or _default_provider
-    active_model = model or DEFAULT_MODELS.get(active_provider, DEFAULT_MODELS[_default_provider])
+    model, provider = resolve_model_selection(config, model=model, provider=provider)
+    default_provider = _get_default_provider()
+    active_provider = provider or default_provider
+    active_model = model or DEFAULT_MODELS.get(active_provider, DEFAULT_MODELS[default_provider])
 
     is_valid, _ = validate_provider(active_provider, active_model)
     if not is_valid:
-        active_model = DEFAULT_MODELS.get(active_provider, active_model)
+        active_provider = active_provider if active_provider in DEFAULT_MODELS else default_provider
+        active_model = DEFAULT_MODELS.get(active_provider, DEFAULT_MODELS[default_provider])
 
     kwargs = get_chat_model_kwargs(active_provider, active_model)
     return cast(
@@ -45,7 +50,7 @@ def load_structured_llm(
     schema: type[T],
     model: Optional[str] = None,
     provider: Optional[str] = None,
-    config: Optional[dict] = None,
+    config: RunnableConfig | Mapping[str, Any] | None = None,
 ) -> BaseChatModel:
     llm = load_llm(model=model, provider=provider, config=config)
     return llm.with_structured_output(schema)

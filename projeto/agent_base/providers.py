@@ -100,7 +100,10 @@ _PROVIDERS: dict[str, BaseLLMProvider] = {
 }
 
 
-_PROVIDER_ALIASES = {"google": "google_genai"}
+_PROVIDER_ALIASES = {
+    "google": "google_genai",
+    "gemini": "google_genai",
+}
 
 
 def get_provider(provider_name: str) -> BaseLLMProvider:
