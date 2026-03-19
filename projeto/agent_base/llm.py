@@ -1,3 +1,4 @@
+import os
 from typing import cast, TypeVar, Optional
 from pydantic import BaseModel
 from langchain.chat_models import init_chat_model, BaseChatModel
@@ -19,7 +20,10 @@ def load_llm(
         model = model or conf.get("model")
         provider = provider or conf.get("model_provider")
 
-    _default_provider = "ollama"
+    provider_from_env = (os.getenv("LLM_PROVIDER") or "ollama").strip().lower()
+    if provider_from_env == "google":
+        provider_from_env = "google_genai"
+    _default_provider = provider_from_env if provider_from_env in DEFAULT_MODELS else "ollama"
     active_provider = provider or _default_provider
     active_model = model or DEFAULT_MODELS.get(active_provider, DEFAULT_MODELS[_default_provider])
 
